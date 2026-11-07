@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  "NL" monogram, centered in the 108x108 viewport.
+  Artwork bounds: x 24..84, y 32..76  ->  center (54, 54) = center of the canvas.
+  Left/right margin = 24, top/bottom margin = 32, and it sits inside the 66dp adaptive-icon
+  safe zone (21..87).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M24,76 L24,32 L32,32 L50,60 L50,32 L58,32 L58,76 L50,76 L32,48 L32,76 Z M62,32 L70,32 L70,68 L84,68 L84,76 L62,76 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="24"
+                android:startY="32"
+                android:endX="84"
+                android:endY="76"
+                android:startColor="@color/nl_blue"
+                android:endColor="@color/nl_purple"
+                android:type="linear" />
+        </aapt:attr>
+    </path>
+</vector>
