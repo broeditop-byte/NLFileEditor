@@ -4,14 +4,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -28,17 +23,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.Save
@@ -58,8 +51,6 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -74,30 +65,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.size
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.notlexi.nlfileeditor.model.BoolItem
-import com.notlexi.nlfileeditor.model.CODE_NOTICE
-import com.notlexi.nlfileeditor.model.CODE_SECTION
 import com.notlexi.nlfileeditor.model.EditItem
-import com.notlexi.nlfileeditor.model.EditorTab
-import com.notlexi.nlfileeditor.model.EditorUiState
-import com.notlexi.nlfileeditor.model.SearchMode
 import com.notlexi.nlfileeditor.model.UiEvent
 import com.notlexi.nlfileeditor.ui.GradientPill
-import com.notlexi.nlfileeditor.ui.SlidingTabs
 import com.notlexi.nlfileeditor.ui.bounceClick
 import com.notlexi.nlfileeditor.ui.theme.NLColors
 import com.notlexi.nlfileeditor.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
 
-/** A row in the numbers list: either a section header or a value card. */
+/** A row in the list: either a section header or a value card. */
 private sealed interface ListRow {
     data class Header(val title: String, val count: Int) : ListRow
     data class Item(val item: EditItem, val index: Int) : ListRow
@@ -134,7 +118,7 @@ fun EditorScreen(vm: MainViewModel) {
         val sections = state.items.map { it.entry.section }.distinct()
         val out = ArrayList<ListRow>()
         var index = 0
-        if (sections.size > 1 || sections.firstOrNull() == CODE_SECTION) {
+        if (sections.size > 1) {
             for (s in sections) {
                 val group = state.items.filter { it.entry.section == s }
                 out.add(ListRow.Header(s, group.size))
@@ -146,9 +130,6 @@ fun EditorScreen(vm: MainViewModel) {
         out as List<ListRow>
     }
 
-    val onValuesTab = state.tab == EditorTab.VALUES
-    val numberMode = state.searchMode == SearchMode.NUMBER
-
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbar) },
@@ -158,10 +139,9 @@ fun EditorScreen(vm: MainViewModel) {
                     Column {
                         Text(state.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
                         Text(
-                            subtitleOf(state),
+                            "${state.totalCount} values · ${state.formatTitle}" +
+                                if (state.changedCount > 0) " · ${state.changedCount} changed" else "",
                             fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -195,51 +175,20 @@ fun EditorScreen(vm: MainViewModel) {
                 .fillMaxSize()
                 .imePadding()
         ) {
-            // ---- top-level tabs: numbers | True/False ----
-            SlidingTabs(
-                options = listOf("Values", "True/False"),
-                selectedIndex = state.tab.ordinal,
-                onSelect = { vm.selectTab(EditorTab.values()[it]) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp)
-            )
-
-            // ---- notice for source-code files ----
-            AnimatedVisibility(
-                visible = state.isCode && onValuesTab,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                CodeNotice()
-            }
-
-            // ---- search (belongs to the open tab) ----
+            // ---- search ----
             OutlinedTextField(
-                value = if (onValuesTab) state.query else state.boolQuery,
+                value = state.query,
                 onValueChange = vm::setQuery,
                 singleLine = true,
-                placeholder = {
-                    Text(
-                        when {
-                            !onValuesTab -> "Search True/False names…"
-                            numberMode -> "Find values equal to…"
-                            else -> "Search values…"
-                        }
-                    )
-                },
+                placeholder = { Text("Search values…") },
                 leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                 trailingIcon = {
-                    val text = if (onValuesTab) state.query else state.boolQuery
-                    AnimatedVisibility(text.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
+                    AnimatedVisibility(state.query.isNotEmpty(), enter = fadeIn(), exit = fadeOut()) {
                         IconButton(onClick = { vm.setQuery("") }) {
                             Icon(Icons.Rounded.Close, contentDescription = "Clear search")
                         }
                     }
                 },
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = if (onValuesTab && numberMode) KeyboardType.Decimal else KeyboardType.Text
-                ),
                 shape = MaterialTheme.shapes.extraLarge,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = NLColors.Blue,
@@ -252,29 +201,7 @@ fun EditorScreen(vm: MainViewModel) {
                     .padding(horizontal = 16.dp, vertical = 4.dp)
             )
 
-            // ---- Name | Number toggle (numbers tab only) ----
-            AnimatedVisibility(
-                visible = onValuesTab,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    SlidingTabs(
-                        options = listOf("Name", "Number"),
-                        selectedIndex = state.searchMode.ordinal,
-                        onSelect = { vm.setSearchMode(SearchMode.values()[it]) },
-                        height = 34.dp,
-                        modifier = Modifier.width(190.dp)
-                    )
-                }
-            }
-
-            // ---- count + reset all ----
+            // ---- reset all row ----
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -282,7 +209,8 @@ fun EditorScreen(vm: MainViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = countText(state),
+                    text = if (state.query.isBlank()) "${state.items.size} values"
+                    else "${state.items.size} of ${state.totalCount} match",
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f)
@@ -294,18 +222,42 @@ fun EditorScreen(vm: MainViewModel) {
                 }
             }
 
-            // ---- content of the open tab ----
-            Crossfade(
-                targetState = state.tab,
-                animationSpec = tween(250),
-                label = "editorTab",
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-            ) { tab ->
-                when (tab) {
-                    EditorTab.VALUES -> ValuesList(state, rows, vm)
-                    EditorTab.BOOLEANS -> BooleanList(state, vm)
+            if (state.items.isEmpty()) {
+                Column(
+                    Modifier.fillMaxSize().padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text("No values match “${state.query}”", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                }
+            } else {
+                LazyColumn(
+                    state = rememberLazyListState(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 32.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(
+                        items = rows,
+                        key = { row ->
+                            when (row) {
+                                is ListRow.Header -> "h_${row.title}"
+                                is ListRow.Item -> "i_${row.item.entry.id}"
+                            }
+                        },
+                        contentType = { row -> if (row is ListRow.Header) 0 else 1 }
+                    ) { row ->
+                        when (row) {
+                            is ListRow.Header -> SectionHeader(row.title, row.count)
+                            is ListRow.Item -> ValueCard(
+                                item = row.item,
+                                index = row.index,
+                                onChange = { vm.onValueChange(row.item.entry.id, it) },
+                                onStep = { vm.step(row.item.entry.id, it) },
+                                onReset = { vm.reset(row.item.entry.id) }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -325,255 +277,6 @@ fun EditorScreen(vm: MainViewModel) {
             shape = MaterialTheme.shapes.large
         )
     }
-}
-
-private fun subtitleOf(state: EditorUiState): String {
-    val parts = ArrayList<String>()
-    if (state.totalCount > 0 || !state.boolScanned) parts.add("${state.totalCount} values")
-    if (state.boolScanned) parts.add("${state.boolTotal} True/False")
-    parts.add(state.formatTitle)
-    if (state.changedCount > 0) parts.add("${state.changedCount} changed")
-    return parts.joinToString(" · ")
-}
-
-private fun countText(state: EditorUiState): String = when (state.tab) {
-    EditorTab.VALUES -> when {
-        state.query.isBlank() -> "${state.items.size} values"
-        state.searchMode == SearchMode.NUMBER -> "${state.items.size} equal ${state.query.trim()}"
-        else -> "${state.items.size} of ${state.totalCount} match"
-    }
-    EditorTab.BOOLEANS -> when {
-        state.boolLoading || !state.boolScanned -> "Scanning…"
-        state.boolQuery.isBlank() -> "${state.boolItems.size} True/False values"
-        else -> "${state.boolItems.size} of ${state.boolTotal} match"
-    }
-}
-
-// ====================================================================== numbers tab
-
-@Composable
-private fun ValuesList(state: EditorUiState, rows: List<ListRow>, vm: MainViewModel) {
-    if (state.items.isEmpty()) {
-        val message = when {
-            state.totalCount == 0 -> "No numeric values in this file"
-            state.searchMode == SearchMode.NUMBER -> "No values equal “${state.query.trim()}”"
-            else -> "No values match “${state.query}”"
-        }
-        EmptyMessage(message)
-    } else {
-        LazyColumn(
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            items(
-                items = rows,
-                key = { row ->
-                    when (row) {
-                        is ListRow.Header -> "h_${row.title}"
-                        is ListRow.Item -> "i_${row.item.entry.id}"
-                    }
-                },
-                contentType = { row -> if (row is ListRow.Header) 0 else 1 }
-            ) { row ->
-                when (row) {
-                    is ListRow.Header -> SectionHeader(row.title, row.count)
-                    is ListRow.Item -> ValueCard(
-                        item = row.item,
-                        index = row.index,
-                        onChange = { vm.onValueChange(row.item.entry.id, it) },
-                        onStep = { vm.step(row.item.entry.id, it) },
-                        onReset = { vm.reset(row.item.entry.id) }
-                    )
-                }
-            }
-        }
-    }
-}
-
-// ====================================================================== True/False tab
-
-@Composable
-private fun BooleanList(state: EditorUiState, vm: MainViewModel) {
-    when {
-        state.boolLoading || !state.boolScanned -> BooleanLoading()
-        state.boolItems.isEmpty() -> EmptyMessage(
-            if (state.boolQuery.isBlank()) "No True/False values found in this file"
-            else "No True/False values match “${state.boolQuery}”"
-        )
-        else -> LazyColumn(
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            itemsIndexed(
-                items = state.boolItems,
-                key = { _, item -> "b_${item.entry.id}" }
-            ) { index, item ->
-                BooleanCard(
-                    item = item,
-                    index = index,
-                    onToggle = { vm.setBoolean(item.entry.id, it) },
-                    onReset = { vm.reset(item.entry.id) }
-                )
-            }
-        }
-    }
-}
-
-/** Shown while the on-demand True/False scan runs. */
-@Composable
-private fun BooleanLoading() {
-    val pulse by rememberInfiniteTransition(label = "boolScan").animateFloat(
-        initialValue = 0.55f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(900, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "boolScanPulse"
-    )
-    Column(
-        Modifier.fillMaxSize().padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        CircularProgressIndicator(color = NLColors.Blue, strokeWidth = 4.dp, modifier = Modifier.size(44.dp))
-        Spacer(Modifier.height(18.dp))
-        Text(
-            "Scanning for True/False values…",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 15.sp,
-            modifier = Modifier.graphicsLayer { alpha = pulse }
-        )
-    }
-}
-
-@Composable
-private fun BooleanCard(
-    item: BoolItem,
-    index: Int,
-    onToggle: (Boolean) -> Unit,
-    onReset: () -> Unit
-) {
-    val enter = rememberEntrance(index)
-    val scheme = MaterialTheme.colorScheme
-    val container by animateColorAsState(
-        targetValue = if (item.changed) NLColors.Blue.copy(alpha = 0.14f) else scheme.surface,
-        animationSpec = tween(300),
-        label = "boolCardColor"
-    )
-    val border by animateColorAsState(
-        targetValue = if (item.changed) NLColors.Blue else scheme.outline.copy(alpha = 0.5f),
-        animationSpec = tween(300),
-        label = "boolCardBorder"
-    )
-    val valueColor by animateColorAsState(
-        targetValue = if (item.current) NLColors.Success else scheme.onSurfaceVariant,
-        animationSpec = tween(250),
-        label = "boolValueColor"
-    )
-
-    Card(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = container),
-        border = BorderStroke(if (item.changed) 1.5.dp else 1.dp, border),
-        modifier = Modifier
-            .fillMaxWidth()
-            .graphicsLayer {
-                alpha = enter.value
-                translationY = (1f - enter.value) * 40f
-            }
-    ) {
-        Row(
-            Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = item.entry.label,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "Original: ${item.entry.original}",
-                    fontSize = 12.sp,
-                    color = scheme.onSurfaceVariant.copy(alpha = 0.8f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            AnimatedVisibility(item.changed, enter = fadeIn(), exit = fadeOut()) {
-                IconButton(onClick = onReset, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Rounded.Undo, contentDescription = "Reset this value", modifier = Modifier.size(20.dp), tint = NLColors.Blue)
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = if (item.current) "True" else "False",
-                color = valueColor,
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp,
-                textAlign = TextAlign.End,
-                modifier = Modifier.width(48.dp)
-            )
-            Spacer(Modifier.width(8.dp))
-            Switch(
-                checked = item.current,
-                onCheckedChange = onToggle,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = NLColors.Blue,
-                    uncheckedThumbColor = scheme.onSurfaceVariant,
-                    uncheckedTrackColor = scheme.surfaceVariant,
-                    uncheckedBorderColor = scheme.outline
-                )
-            )
-        }
-    }
-}
-
-// ====================================================================== shared pieces
-
-@Composable
-private fun EmptyMessage(text: String) {
-    Column(
-        Modifier.fillMaxSize().padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-    }
-}
-
-/** Calm info card used when the file turned out to be source code rather than a save file. */
-@Composable
-private fun CodeNotice() {
-    Card(
-        shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = NLColors.Blue.copy(alpha = 0.12f)),
-        border = BorderStroke(1.dp, NLColors.Blue.copy(alpha = 0.6f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-    ) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
-            Icon(Icons.Rounded.Info, contentDescription = null, tint = NLColors.Blue, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(10.dp))
-            Text(CODE_NOTICE, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
-        }
-    }
-}
-
-/** Staggered entrance: the first cards slide/fade in one after another. */
-@Composable
-private fun rememberEntrance(index: Int): Animatable<Float, androidx.compose.animation.core.AnimationVector1D> {
-    val enter = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        delay((index.coerceAtMost(12) * 45).toLong())
-        enter.animateTo(1f, tween(380, easing = FastOutSlowInEasing))
-    }
-    return enter
 }
 
 @Composable
@@ -605,7 +308,12 @@ private fun ValueCard(
     onStep: (Int) -> Unit,
     onReset: () -> Unit
 ) {
-    val enter = rememberEntrance(index)
+    // Staggered entrance: the first cards slide/fade in one after another.
+    val enter = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        delay((index.coerceAtMost(12) * 45).toLong())
+        enter.animateTo(1f, tween(380, easing = FastOutSlowInEasing))
+    }
 
     val scheme = MaterialTheme.colorScheme
     val container by animateColorAsState(
@@ -700,7 +408,7 @@ private fun ValueCard(
 }
 
 @Composable
-private fun StepButton(icon: ImageVector, description: String, onClick: () -> Unit) {
+private fun StepButton(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, onClick: () -> Unit) {
     Icon(
         imageVector = icon,
         contentDescription = description,

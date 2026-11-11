@@ -5,15 +5,14 @@ plugins {
 
 android {
     namespace = "com.notlexi.nlfileeditor"
-    compileSdk = 35
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.notlexi.nlfileeditor"
         minSdk = 24
         targetSdk = 34
-        versionCode = 60000
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
-        versionName = "6.0.0"
+        versionCode = 1
+        versionName = "1.0"
     }
 
     buildTypes {
@@ -32,12 +31,7 @@ android {
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
-    packaging {
-        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        // NL TMX Full runs proot (libproot.so) straight from the app's native-library folder,
-        // the only place Android lets an app execute files from. That needs them extracted to disk.
-        jniLibs { useLegacyPackaging = true }
-    }
+    packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
 
 dependencies {
@@ -49,9 +43,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.2")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.2")
     implementation("androidx.navigation:navigation-compose:2.7.7")
-    implementation("androidx.documentfile:documentfile:1.0.1")
-    implementation("org.apache.commons:commons-compress:1.26.2")
-    implementation(project(":terminal-view"))
 
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
@@ -61,5 +52,4 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 }

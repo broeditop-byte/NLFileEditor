@@ -36,29 +36,4 @@ object TextCodec {
         }
         return control * 100 / n > 5
     }
-
-    /**
-     * True if the DECODED text is mostly garbage: control characters, replacement glyphs (U+FFFD),
-     * C1 control codes, private-use symbols, or (for files that are not valid UTF-8) a large share
-     * of non-ASCII characters, which is what binary data looks like when read as Latin-1.
-     */
-    fun looksGarbled(decoded: Decoded): Boolean {
-        val text = decoded.text
-        val n = minOf(text.length, 16_384)
-        if (n == 0) return false
-        var bad = 0
-        var nonAscii = 0
-        for (k in 0 until n) {
-            val c = text[k]
-            if (c == '\t' || c == '\n' || c == '\r') continue
-            if (c < ' ' || c == '\u007F' ||
-                c in '\u0080'..'\u009F' ||
-                c == '�' ||
-                c in ''..''
-            ) bad++
-            if (c.code > 127) nonAscii++
-        }
-        if (bad * 100 / n >= 8) return true
-        return decoded.charset == Charsets.ISO_8859_1 && nonAscii * 100 / n >= 30
-    }
 }

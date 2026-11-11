@@ -12,9 +12,6 @@ internal class JsonScanner(private val s: String) {
     private val out = ArrayList<RawNumber>()
     private var i = 0
 
-    /** Every true/false literal found while walking (used by the True/False tab). */
-    val booleans = ArrayList<RawNumber>()
-
     fun scan(): List<RawNumber> {
         skipWs()
         value("", 0)
@@ -36,7 +33,7 @@ internal class JsonScanner(private val s: String) {
             '[' -> arr(path, depth)
             '"' -> readString()
             '-', in '0'..'9' -> number(path)
-            else -> literal(path)
+            else -> literal()
         }
     }
 
@@ -122,15 +119,9 @@ internal class JsonScanner(private val s: String) {
         }
     }
 
-    private fun literal(path: String) {
+    private fun literal() {
         for (word in arrayOf("true", "false", "null")) {
-            if (s.startsWith(word, i)) {
-                if (word != "null") {
-                    booleans.add(RawNumber(path.ifEmpty { "value" }, ScanUtil.sectionOf(path), i, i + word.length))
-                }
-                i += word.length
-                return
-            }
+            if (s.startsWith(word, i)) { i += word.length; return }
         }
         fail()
     }

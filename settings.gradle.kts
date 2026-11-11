@@ -15,5 +15,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "NLFileEditor"
 include(":app")
-include(":terminal-emulator")
-include(":terminal-view")
